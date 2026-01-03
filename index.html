@@ -7,7 +7,7 @@
         
         /* Sidebar Styles */
         .sidebar { width: 260px; background: #2b2d31; display: flex; flex-direction: column; border-right: 1px solid #1e1f22; }
-        .sidebar-header { padding: 20px; background: #232428; border-bottom: 1px solid #1e1f22; }
+        .sidebar-header { padding: 20px; background: #232428; border-bottom: 1px solid #1e1f22; display: flex; justify-content: space-between; align-items: center; }
         .sidebar-content { flex: 1; overflow-y: auto; padding: 10px; }
         .section-title { font-size: 0.7rem; font-weight: bold; color: #949ba4; text-transform: uppercase; margin: 15px 0 5px 5px; display: flex; justify-content: space-between; align-items: center; }
         
@@ -16,7 +16,7 @@
         .nav-item:hover { background: #35373c; color: white; }
         .nav-item.active { background: #404249; color: white; }
         .nav-item.global { color: #5865f2; font-weight: bold; }
-        .delete-btn { opacity: 0; color: #da373c; font-size: 0.8rem; }
+        .delete-btn { opacity: 0; color: #da373c; font-size: 0.8rem; padding: 0 5px; }
         .nav-item:hover .delete-btn { opacity: 1; }
 
         /* Main Chat Area */
@@ -32,26 +32,46 @@
 
         /* Inputs */
         .input-area { padding: 20px; background: #313338; display: flex; gap: 10px; }
-        input { flex: 1; background: #383a40; border: none; padding: 12px; color: white; border-radius: 5px; outline: none; }
+        input.chat-input { flex: 1; background: #383a40; border: none; padding: 12px; color: white; border-radius: 5px; outline: none; }
         button.send-btn { background: #5865f2; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
         .add-btn { cursor: pointer; font-size: 1.2rem; line-height: 1; }
-        .add-btn:hover { color: white; }
+        .settings-icon { cursor: pointer; opacity: 0.7; font-size: 1.2rem; }
+        .settings-icon:hover { opacity: 1; }
+
+        /* Auth Screen */
+        #auth-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #313338; z-index: 9999; display: flex; align-items: center; justify-content: center; color: white; }
+        .auth-box { background: #2b2d31; padding: 40px; border-radius: 8px; width: 320px; text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+        .auth-input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 4px; border: none; background: #1e1f22; color: white; box-sizing: border-box; }
+        .auth-btn { width: 100%; padding: 12px; margin-top: 20px; background: #5865f2; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
     </style>
 </head>
 <body>
 
+<div id="auth-container">
+    <div class="auth-box">
+        <h2 id="auth-title">Welcome Back</h2>
+        <input type="text" id="auth-username" class="auth-input" placeholder="Username">
+        <input type="password" id="auth-password" class="auth-input" placeholder="Password">
+        <button onclick="handleAuthAction()" id="auth-submit-btn" class="auth-btn">Log In</button>
+        <p id="auth-switch-text" style="margin-top: 20px; font-size: 0.85rem; color: #b5bac1;">
+            Need an account? <a href="#" onclick="toggleAuthMode()" style="color: #00a8fc; text-decoration: none;">Register</a>
+        </p>
+    </div>
+</div>
+
 <div class="sidebar">
     <div class="sidebar-header">
-        <h3 style="margin: 0; font-size: 1.1rem; color: white;">Messenger</h3>
-        <span style="font-size: 0.8rem; color: #b5bac1;">User: <b id="user-display">...</b></span>
+        <div>
+            <h3 style="margin: 0; font-size: 1.1rem; color: white;">Messenger</h3>
+            <span style="font-size: 0.8rem; color: #b5bac1;"><b id="user-display">...</b></span>
+        </div>
+        <span class="settings-icon" onclick="logoutAndSwitch()" title="Logout/Settings">⚙️</span>
     </div>
 
     <div class="sidebar-content">
         <div class="nav-item global" id="item-Global" onclick="switchRoom('Global')"># Global Chat</div>
-
         <div class="section-title">Servers <span class="add-btn" onclick="addRoom('server')">+</span></div>
         <div id="server-list"></div>
-
         <div class="section-title">Private Chats <span class="add-btn" onclick="addRoom('friend')">+</span></div>
         <div id="friend-list"></div>
     </div>
@@ -61,19 +81,17 @@
     <div class="room-info">
         <span># <span id="room-display">Global</span></span>
     </div>
-    
     <div id="messages"></div>
-
     <div class="input-area">
-        <input type="text" id="message-input" placeholder="Message..." onkeypress="handleKey(event)">
+        <input type="text" id="message-input" class="chat-input" placeholder="Message..." onkeypress="handleKey(event)">
         <button class="send-btn" onclick="sendMessage()">Send</button>
     </div>
 </div>
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-  import { getFirestore, collection, addDoc, query, where, orderBy, onSnapshot, serverTimestamp } 
-  from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, updateProfile, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+  import { getFirestore, collection, addDoc, query, where, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyBDAjMzBQs9KAqGbTnJbXFc3L9tRcAwKGA",
@@ -86,37 +104,126 @@
 
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
-
-  // --- DATA SETUP ---
-  let username = localStorage.getItem('chat_user') || prompt("Enter Username:") || "User" + Math.floor(Math.random()*1000);
-  localStorage.setItem('chat_user', username);
-  document.getElementById('user-display').innerText = username;
+  const auth = getAuth(app);
 
   let currentRoom = localStorage.getItem('chat_room') || "Global";
   let servers = JSON.parse(localStorage.getItem('chat_servers')) || [];
   let friends = JSON.parse(localStorage.getItem('chat_friends')) || [];
+  let isSignupMode = false;
+  let unsubscribeMessages = null;
 
-  // --- FUNCTIONS ---
+  // --- AUTH LOGIC ---
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      document.getElementById('auth-container').style.display = 'none';
+      document.getElementById('user-display').innerText = user.displayName || user.email.split('@')[0];
+      checkInvites();
+      initChat();
+      renderSidebar();
+    } else {
+      document.getElementById('auth-container').style.display = 'flex';
+    }
+  });
 
+  window.toggleAuthMode = () => {
+    isSignupMode = !isSignupMode;
+    document.getElementById('auth-title').innerText = isSignupMode ? "Create Account" : "Welcome Back";
+    document.getElementById('auth-submit-btn').innerText = isSignupMode ? "Register" : "Log In";
+  };
+
+  window.handleAuthAction = async () => {
+    const user = document.getElementById('auth-username').value.trim();
+    const pass = document.getElementById('auth-password').value;
+    const ghostEmail = `${user.toLowerCase()}@messenger.internal`;
+    try {
+      if (isSignupMode) {
+        const cred = await createUserWithEmailAndPassword(auth, ghostEmail, pass);
+        await updateProfile(cred.user, { displayName: user });
+      } else {
+        await signInWithEmailAndPassword(auth, ghostEmail, pass);
+      }
+    } catch (e) { alert(e.message); }
+  };
+
+  window.logoutAndSwitch = () => {
+    if (confirm("Logout?")) {
+      signOut(auth).then(() => { localStorage.clear(); location.reload(); });
+    }
+  };
+
+  // --- CHAT LOGIC ---
+  function initChat() {
+    if (unsubscribeMessages) unsubscribeMessages();
+    const q = query(collection(db, "messages"), where("room", "==", currentRoom), orderBy("timestamp", "asc"));
+    unsubscribeMessages = onSnapshot(q, (snapshot) => {
+      const msgBox = document.getElementById('messages');
+      msgBox.innerHTML = "";
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        let time = data.timestamp ? data.timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "...";
+        const div = document.createElement('div');
+        div.className = `msg ${data.user === auth.currentUser.displayName ? 'mine' : ''}`;
+        div.innerHTML = `<b>${data.user}</b>${data.text}<span class="time">${time}</span>`;
+        msgBox.appendChild(div);
+      });
+      msgBox.scrollTop = msgBox.scrollHeight;
+    });
+  }
+
+  window.sendMessage = async () => {
+    const input = document.getElementById('message-input');
+    if (!input.value.trim()) return;
+    await addDoc(collection(db, "messages"), {
+      user: auth.currentUser.displayName,
+      text: input.value,
+      room: currentRoom,
+      timestamp: serverTimestamp()
+    });
+    input.value = "";
+  };
+
+  // --- INVITE & ROOM LOGIC ---
   window.addRoom = (type) => {
-    const name = prompt(type === 'server' ? "Enter Server Name:" : "Enter Friend's Name/ID:");
-    if (!name) return;
-    if (type === 'server') servers.push(name);
-    else friends.push(name);
+    if (type === 'server') {
+      const choice = confirm("OK to Create Server, Cancel to Join via Invite");
+      if (choice) {
+        const name = prompt("Server Name:");
+        if (!name) return;
+        const id = name.replace(/\s/g,'') + "-" + Math.random().toString(36).substring(2,7).toUpperCase();
+        servers.push({ id, name });
+        alert("Server Created! Share this link: " + window.location.origin + window.location.pathname + "?join=" + id);
+      } else {
+        const invite = prompt("Paste Invite Code/Link:");
+        if (invite) handleJoinCode(invite);
+      }
+    } else {
+      const f = prompt("Friend Username:");
+      if (f) friends.push({ id: f, name: f });
+    }
     saveAndRefresh();
   };
 
-  window.switchRoom = (name) => {
-    localStorage.setItem('chat_room', name);
-    location.reload();
-  };
+  function handleJoinCode(code) {
+    const id = code.includes('=') ? code.split('=')[1] : code;
+    const name = id.split('-')[0] || "New Server";
+    if (!servers.find(s => s.id === id)) servers.push({ id, name });
+    saveAndRefresh();
+  }
 
-  window.deleteRoom = (e, name, type) => {
+  function checkInvites() {
+    const code = new URLSearchParams(window.location.search).get('join');
+    if (code) {
+      handleJoinCode(code);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }
+
+  window.switchRoom = (id) => { localStorage.setItem('chat_room', id); location.reload(); };
+  window.deleteRoom = (e, id) => {
     e.stopPropagation();
-    if (!confirm(`Remove ${name}?`)) return;
-    if (type === 'server') servers = servers.filter(s => s !== name);
-    else friends = friends.filter(f => f !== name);
-    if (currentRoom === name) localStorage.setItem('chat_room', 'Global');
+    servers = servers.filter(s => s.id !== id);
+    friends = friends.filter(f => f.id !== id);
+    if (currentRoom === id) localStorage.setItem('chat_room', 'Global');
     saveAndRefresh();
   };
 
@@ -129,60 +236,13 @@
   function renderSidebar() {
     const sList = document.getElementById('server-list');
     const fList = document.getElementById('friend-list');
-    sList.innerHTML = '';
-    fList.innerHTML = '';
-
-    servers.forEach(s => {
-        sList.innerHTML += `
-            <div class="nav-item ${currentRoom === s ? 'active' : ''}" onclick="switchRoom('${s}')">
-                # ${s} <span class="delete-btn" onclick="deleteRoom(event, '${s}', 'server')">×</span>
-            </div>`;
-    });
-
-    friends.forEach(f => {
-        fList.innerHTML += `
-            <div class="nav-item ${currentRoom === f ? 'active' : ''}" onclick="switchRoom('${f}')">
-                👤 ${f} <span class="delete-btn" onclick="deleteRoom(event, '${f}', 'friend')">×</span>
-            </div>`;
-    });
-
-    document.getElementById('room-display').innerText = currentRoom;
+    sList.innerHTML = ''; fList.innerHTML = '';
+    servers.forEach(s => sList.innerHTML += `<div class="nav-item ${currentRoom===s.id?'active':''}" onclick="switchRoom('${s.id}')"># ${s.name} <span class="delete-btn" onclick="deleteRoom(event, '${s.id}')">×</span></div>`);
+    friends.forEach(f => fList.innerHTML += `<div class="nav-item ${currentRoom===f.id?'active':''}" onclick="switchRoom('${f.id}')">👤 ${f.name} <span class="delete-btn" onclick="deleteRoom(event, '${f.id}')">×</span></div>`);
+    document.getElementById('room-display').innerText = currentRoom.split('-')[0];
   }
 
-  // --- CHAT LOGIC ---
-  window.sendMessage = async () => {
-      const input = document.getElementById('message-input');
-      const text = input.value.trim();
-      if (!text) return;
-
-      await addDoc(collection(db, "messages"), {
-          user: username,
-          text: text,
-          room: currentRoom,
-          timestamp: serverTimestamp()
-      });
-      input.value = "";
-  };
-
-  window.handleKey = (e) => { if (e.key === 'Enter') sendMessage(); };
-
-  const q = query(collection(db, "messages"), where("room", "==", currentRoom), orderBy("timestamp", "asc"));
-
-  onSnapshot(q, (snapshot) => {
-      const msgBox = document.getElementById('messages');
-      msgBox.innerHTML = "";
-      snapshot.forEach((doc) => {
-          const data = doc.data();
-          let timeString = data.timestamp ? data.timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "pending...";
-          const div = document.createElement('div');
-          div.className = `msg ${data.user === username ? 'mine' : ''}`;
-          div.innerHTML = `<b>${data.user}</b>${data.text}<span class="time">${timeString}</span>`;
-          msgBox.appendChild(div);
-      });
-      msgBox.scrollTop = msgBox.scrollHeight;
-  });
-
-  renderSidebar();
+  window.handleKey = (e) => { if(e.key === 'Enter') sendMessage(); };
 </script>
 </body>
 </html>
