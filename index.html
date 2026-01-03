@@ -9,10 +9,14 @@
         
         /* Message Area */
         #messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
-        .msg { background: #383a40; padding: 10px 15px; border-radius: 8px; max-width: 80%; align-self: flex-start; }
+        .msg { background: #383a40; padding: 10px 15px; border-radius: 8px; max-width: 80%; align-self: flex-start; position: relative; }
         .msg.mine { align-self: flex-end; background: #5865f2; color: white; }
+        
         .msg b { display: block; font-size: 0.75rem; color: #00aff4; margin-bottom: 3px; }
         .msg.mine b { color: #e0e0e0; }
+
+        /* Timestamp Style */
+        .time { font-size: 0.65rem; opacity: 0.6; margin-top: 5px; text-align: right; display: block; }
 
         /* Controls */
         .room-info { background: #232428; padding: 10px 20px; font-size: 0.9rem; border-bottom: 1px solid #1e1f22; display: flex; justify-content: space-between; }
@@ -20,7 +24,7 @@
         input { flex: 1; background: #383a40; border: none; padding: 12px; color: white; border-radius: 5px; outline: none; }
         button { background: #5865f2; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
         button:hover { background: #4752c4; }
-        .room-btn { background: #4e5058; margin-top: 10px; font-size: 0.8rem; }
+        .room-btn { background: #4e5058; margin-top: 10px; font-size: 0.8rem; color: white; padding: 8px; border-radius: 5px; cursor: pointer; border: none; }
     </style>
 </head>
 <body>
@@ -29,7 +33,7 @@
     <h2 style="color: white; margin-top: 0;">Messenger</h2>
     <p style="font-size: 0.8rem; color: #b5bac1;">USER: <b id="user-display">...</b></p>
     <button class="room-btn" onclick="changeRoom()">Join/Create Room</button>
-    <p style="font-size: 0.7rem; margin-top: auto; color: #949ba4;">Powered by Firebase Cloud Storage</p>
+    <p style="font-size: 0.7rem; margin-top: auto; color: #949ba4;">History saved in Cloud</p>
 </div>
 
 <div class="chat-area">
@@ -38,7 +42,7 @@
     </div>
     <div id="messages"></div>
     <div class="input-area">
-        <input type="text" id="message-input" placeholder="Type a message...">
+        <input type="text" id="message-input" placeholder="Type a message..." onkeypress="handleKey(event)">
         <button onclick="sendMessage()">Send</button>
     </div>
 </div>
@@ -61,7 +65,6 @@
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
 
-  // User & Room Setup
   let username = localStorage.getItem('chat_user') || prompt("Enter Username:") || "User" + Math.floor(Math.random()*1000);
   localStorage.setItem('chat_user', username);
   document.getElementById('user-display').innerText = username;
@@ -70,14 +73,13 @@
   document.getElementById('room-display').innerText = currentRoom;
 
   window.changeRoom = () => {
-      let r = prompt("Enter Room Name (e.g. Secret123):");
+      let r = prompt("Enter Room Name:");
       if(r) {
           localStorage.setItem('chat_room', r);
           location.reload();
       }
   };
 
-  // Send Message
   window.sendMessage = async () => {
       const input = document.getElementById('message-input');
       const text = input.value.trim();
@@ -92,7 +94,11 @@
       input.value = "";
   };
 
-  // Listen for Messages in current room only
+  // 1. Enter-to-Send Logic
+  window.handleKey = (e) => {
+      if (e.key === 'Enter') sendMessage();
+  };
+
   const q = query(
       collection(db, "messages"), 
       where("room", "==", currentRoom),
@@ -104,15 +110,27 @@
       msgBox.innerHTML = "";
       snapshot.forEach((doc) => {
           const data = doc.data();
+          
+          // 2. Timestamp Logic
+          let timeString = "";
+          if(data.timestamp) {
+              const d = data.timestamp.toDate();
+              timeString = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          }
+
           const div = document.createElement('div');
           div.className = `msg ${data.user === username ? 'mine' : ''}`;
-          div.innerHTML = `<b>${data.user}</b>${data.text}`;
+          div.innerHTML = `
+            <b>${data.user}</b>
+            ${data.text}
+            <span class="time">${timeString}</span>
+          `;
           msgBox.appendChild(div);
       });
+      
+      // 3. Auto-Scroll Logic
       msgBox.scrollTop = msgBox.scrollHeight;
   });
-
-  document.getElementById('message-input').onkeypress = (e) => { if(e.key === 'Enter') sendMessage(); };
 </script>
 
 </body>
