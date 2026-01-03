@@ -38,8 +38,8 @@
         .settings-icon { cursor: pointer; opacity: 0.7; font-size: 1.2rem; }
         .settings-icon:hover { opacity: 1; }
 
-        /* Auth Screen */
-        #auth-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #313338; z-index: 9999; display: flex; align-items: center; justify-content: center; color: white; }
+        /* Auth Screen - Hidden by default to prevent flicker */
+        #auth-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #313338; z-index: 9999; display: none; align-items: center; justify-content: center; color: white; }
         .auth-box { background: #2b2d31; padding: 40px; border-radius: 8px; width: 320px; text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
         .auth-input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 4px; border: none; background: #1e1f22; color: white; box-sizing: border-box; }
         .auth-btn { width: 100%; padding: 12px; margin-top: 20px; background: #5865f2; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
@@ -114,14 +114,15 @@
 
   // --- AUTH LOGIC ---
   onAuthStateChanged(auth, (user) => {
+    const authScreen = document.getElementById('auth-container');
     if (user) {
-      document.getElementById('auth-container').style.display = 'none';
+      authScreen.style.display = 'none';
       document.getElementById('user-display').innerText = user.displayName || user.email.split('@')[0];
       checkInvites();
       initChat();
       renderSidebar();
     } else {
-      document.getElementById('auth-container').style.display = 'flex';
+      authScreen.style.display = 'flex';
     }
   });
 
@@ -218,13 +219,25 @@
     }
   }
 
-  window.switchRoom = (id) => { localStorage.setItem('chat_room', id); location.reload(); };
+  // --- FIXED SWITCH ROOM (No Reload) ---
+  window.switchRoom = (id) => {
+    currentRoom = id;
+    localStorage.setItem('chat_room', id);
+    document.getElementById('room-display').innerText = id.split('-')[0];
+    renderSidebar();
+    initChat();
+  };
+
   window.deleteRoom = (e, id) => {
     e.stopPropagation();
     servers = servers.filter(s => s.id !== id);
     friends = friends.filter(f => f.id !== id);
-    if (currentRoom === id) localStorage.setItem('chat_room', 'Global');
+    if (currentRoom === id) {
+        currentRoom = 'Global';
+        localStorage.setItem('chat_room', 'Global');
+    }
     saveAndRefresh();
+    initChat();
   };
 
   function saveAndRefresh() {
@@ -237,9 +250,16 @@
     const sList = document.getElementById('server-list');
     const fList = document.getElementById('friend-list');
     sList.innerHTML = ''; fList.innerHTML = '';
-    servers.forEach(s => sList.innerHTML += `<div class="nav-item ${currentRoom===s.id?'active':''}" onclick="switchRoom('${s.id}')"># ${s.name} <span class="delete-btn" onclick="deleteRoom(event, '${s.id}')">×</span></div>`);
-    friends.forEach(f => fList.innerHTML += `<div class="nav-item ${currentRoom===f.id?'active':''}" onclick="switchRoom('${f.id}')">👤 ${f.name} <span class="delete-btn" onclick="deleteRoom(event, '${f.id}')">×</span></div>`);
-    document.getElementById('room-display').innerText = currentRoom.split('-')[0];
+    
+    // Set Global Chat active state
+    document.getElementById('item-Global').className = `nav-item global ${currentRoom === 'Global' ? 'active' : ''}`;
+
+    servers.forEach(s => {
+        sList.innerHTML += `<div class="nav-item ${currentRoom===s.id?'active':''}" onclick="switchRoom('${s.id}')"># ${s.name} <span class="delete-btn" onclick="deleteRoom(event, '${s.id}')">×</span></div>`;
+    });
+    friends.forEach(f => {
+        fList.innerHTML += `<div class="nav-item ${currentRoom===f.id?'active':''}" onclick="switchRoom('${f.id}')">👤 ${f.name} <span class="delete-btn" onclick="deleteRoom(event, '${f.id}')">×</span></div>`;
+    });
   }
 
   window.handleKey = (e) => { if(e.key === 'Enter') sendMessage(); };
