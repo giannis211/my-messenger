@@ -16,7 +16,7 @@
         .nav-item:hover { background: #35373c; color: white; }
         .nav-item.active { background: #404249; color: white; }
         .nav-item.global { color: #5865f2; font-weight: bold; }
-        .delete-btn { opacity: 0; color: #da373c; font-size: 0.8rem; padding: 0 5px; }
+        .delete-btn { opacity: 0; color: #da373c; font-size: 0.7rem; padding: 2px 6px; border-radius: 3px; background: #383a40; transition: 0.2s; }
         .nav-item:hover .delete-btn { opacity: 1; }
 
         /* Main Chat Area */
@@ -57,9 +57,7 @@
         <p id="modal-desc" style="color: #b5bac1; font-size: 0.9rem;"></p>
         <input type="text" id="modal-input" class="auth-input" placeholder="">
         <div class="modal-buttons" id="modal-footer">
-            <button class="btn-cancel" onclick="closeModal()">Cancel</button>
-            <button class="btn-confirm" id="modal-confirm-btn">Confirm</button>
-        </div>
+            </div>
     </div>
 </div>
 
@@ -107,7 +105,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
   import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, updateProfile, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-  import { getFirestore, collection, addDoc, query, where, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+  import { getFirestore, collection, addDoc, query, where, orderBy, onSnapshot, serverTimestamp, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyBDAjMzBQs9KAqGbTnJbXFc3L9tRcAwKGA",
@@ -122,9 +120,9 @@
   const db = getFirestore(app);
   const auth = getAuth(app);
 
-  let currentRoom = localStorage.getItem('chat_room') || "Global";
-  let servers = JSON.parse(localStorage.getItem('chat_servers')) || [];
-  let friends = JSON.parse(localStorage.getItem('chat_friends')) || [];
+  let currentRoom = "Global";
+  let servers = [];
+  let friends = [];
   let isSignupMode = false;
   let unsubscribeMessages = null;
 
@@ -133,6 +131,9 @@
   
   function openModal(title, desc, inputPlaceholder, confirmText, onConfirm, showInput = true) {
     const modal = document.getElementById('custom-modal');
+    const footer = document.getElementById('modal-footer');
+    
+    // Reset Modal UI
     document.getElementById('modal-title').innerText = title;
     document.getElementById('modal-desc').innerText = desc;
     const input = document.getElementById('modal-input');
@@ -140,10 +141,34 @@
     input.placeholder = inputPlaceholder;
     input.value = "";
     
-    const confirmBtn = document.getElementById('modal-confirm-btn');
-    confirmBtn.innerText = confirmText;
-    confirmBtn.onclick = () => { onConfirm(input.value); };
+    // Clear Footer to prevent button duplication
+    footer.innerHTML = `
+        <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+        <button class="btn-confirm" id="modal-confirm-btn">${confirmText}</button>
+    `;
+    
+    document.getElementById('modal-confirm-btn').onclick = () => { onConfirm(input.value); };
     modal.style.display = 'flex';
+  }
+
+  // --- PERSISTENT DATA LOGIC (Saves servers to Account) ---
+  async function loadUserData(user) {
+    const userDoc = await getDoc(doc(db, "users", user.uid));
+    if (userDoc.exists()) {
+        servers = userDoc.data().servers || [];
+        friends = userDoc.data().friends || [];
+    }
+    renderSidebar();
+    initChat();
+  }
+
+  async function saveUserData() {
+    if (!auth.currentUser) return;
+    await setDoc(doc(db, "users", auth.currentUser.uid), {
+        servers: servers,
+        friends: friends
+    }, { merge: true });
+    renderSidebar();
   }
 
   // --- AUTH LOGIC ---
@@ -152,18 +177,11 @@
       document.getElementById('auth-container').style.display = 'none';
       document.getElementById('user-display').innerText = user.displayName || user.email.split('@')[0];
       checkInvites();
-      initChat();
-      renderSidebar();
+      loadUserData(user);
     } else {
       document.getElementById('auth-container').style.display = 'flex';
     }
   });
-
-  window.toggleAuthMode = () => {
-    isSignupMode = !isSignupMode;
-    document.getElementById('auth-title').innerText = isSignupMode ? "Create Account" : "Welcome Back";
-    document.getElementById('auth-submit-btn').innerText = isSignupMode ? "Register" : "Log In";
-  };
 
   window.handleAuthAction = async () => {
     const user = document.getElementById('auth-username').value.trim();
@@ -179,9 +197,15 @@
     } catch (e) { alert(e.message); }
   };
 
+  window.toggleAuthMode = () => {
+    isSignupMode = !isSignupMode;
+    document.getElementById('auth-title').innerText = isSignupMode ? "Create Account" : "Welcome Back";
+    document.getElementById('auth-submit-btn').innerText = isSignupMode ? "Register" : "Log In";
+  };
+
   window.logoutRequest = () => {
     openModal("Logout", "Are you sure you want to log out?", "", "Logout", () => {
-        signOut(auth).then(() => { localStorage.clear(); location.reload(); });
+        signOut(auth).then(() => { location.reload(); });
     }, false);
   };
 
@@ -216,39 +240,35 @@
     input.value = "";
   };
 
-  // --- ROOM LOGIC (Using Modals) ---
+  // --- ROOM LOGIC ---
   window.addRoom = (type) => {
     if (type === 'server') {
-        openModal("Server Options", "Would you like to create a new server or join an existing one?", "", "Join Existing", () => {
-            // This is the Join Flow
-            openModal("Join Server", "Paste your invite link or code below:", "Server Code", "Join", (code) => {
+        openModal("Server Options", "Join or Create a server?", "", "Join Existing", () => {
+            openModal("Join Server", "Enter invite code:", "Code", "Join", (code) => {
                 if(code) handleJoinCode(code);
                 closeModal();
             });
-        });
-        // Inject a 'Create' button into the footer for this specific choice
+        }, false);
+
+        // Safely add Create button without duplicates
         const footer = document.getElementById('modal-footer');
         const createBtn = document.createElement('button');
         createBtn.className = 'btn-confirm';
         createBtn.style.background = '#23a559';
         createBtn.innerText = "Create New";
         createBtn.onclick = () => {
-            openModal("Create Server", "Give your new server a name:", "Server Name", "Create", (name) => {
+            openModal("Create Server", "Enter server name:", "Name", "Create", (name) => {
                 if(!name) return;
                 const id = name.replace(/\s/g,'') + "-" + Math.random().toString(36).substring(2,7).toUpperCase();
                 servers.push({ id, name });
-                saveAndRefresh();
-                openModal("Server Created", "Share this code: " + id, "", "Close", closeModal, false);
+                saveUserData();
+                openModal("Server Created", "Invite Code: " + id, "", "Done", closeModal, false);
             });
         };
         footer.prepend(createBtn);
     } else {
-        openModal("Add Friend", "Enter your friend's username:", "Username", "Add Friend", (f) => {
-            if (f) {
-                friends.push({ id: f, name: f });
-                saveAndRefresh();
-                closeModal();
-            }
+        openModal("Add Friend", "Enter friend username:", "Username", "Add", (f) => {
+            if (f) { friends.push({ id: f, name: f }); saveUserData(); closeModal(); }
         });
     }
   };
@@ -258,7 +278,7 @@
     const name = id.split('-')[0] || "New Server";
     if (!servers.find(s => s.id === id)) {
         servers.push({ id, name });
-        saveAndRefresh();
+        saveUserData();
     }
   }
 
@@ -272,7 +292,6 @@
 
   window.switchRoom = (id) => {
     currentRoom = id;
-    localStorage.setItem('chat_room', id);
     document.getElementById('room-display').innerText = id.split('-')[0];
     renderSidebar();
     initChat();
@@ -280,33 +299,24 @@
 
   window.deleteRoom = (e, id) => {
     e.stopPropagation();
-    openModal("Delete", "Remove this from your list?", "", "Remove", () => {
+    openModal("Leave Server", "Are you sure you want to leave?", "", "Leave", () => {
         servers = servers.filter(s => s.id !== id);
         friends = friends.filter(f => f.id !== id);
-        if (currentRoom === id) {
-            currentRoom = 'Global';
-            localStorage.setItem('chat_room', 'Global');
-            document.getElementById('room-display').innerText = 'Global';
-        }
-        saveAndRefresh();
-        initChat();
+        if (currentRoom === id) switchRoom('Global');
+        saveUserData();
         closeModal();
     }, false);
   };
-
-  function saveAndRefresh() {
-    localStorage.setItem('chat_servers', JSON.stringify(servers));
-    localStorage.setItem('chat_friends', JSON.stringify(friends));
-    renderSidebar();
-  }
 
   function renderSidebar() {
     const sList = document.getElementById('server-list');
     const fList = document.getElementById('friend-list');
     sList.innerHTML = ''; fList.innerHTML = '';
+    
     document.getElementById('item-Global').className = `nav-item global ${currentRoom === 'Global' ? 'active' : ''}`;
+    
     servers.forEach(s => {
-        sList.innerHTML += `<div class="nav-item ${currentRoom===s.id?'active':''}" onclick="switchRoom('${s.id}')"># ${s.name} <span class="delete-btn" onclick="deleteRoom(event, '${s.id}')">×</span></div>`;
+        sList.innerHTML += `<div class="nav-item ${currentRoom===s.id?'active':''}" onclick="switchRoom('${s.id}')"># ${s.name} <span class="delete-btn" onclick="deleteRoom(event, '${s.id}')">Leave</span></div>`;
     });
     friends.forEach(f => {
         fList.innerHTML += `<div class="nav-item ${currentRoom===f.id?'active':''}" onclick="switchRoom('${f.id}')">👤 ${f.name} <span class="delete-btn" onclick="deleteRoom(event, '${f.id}')">×</span></div>`;
