@@ -3,47 +3,70 @@
 <head>
     <title>Messenger Pro</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #1e1f22; color: #dbdee1; margin: 0; display: flex; height: 100vh; }
-        .sidebar { width: 260px; background: #2b2d31; padding: 20px; display: flex; flex-direction: column; border-right: 1px solid #1e1f22; }
+        body { font-family: 'Segoe UI', sans-serif; background: #1e1f22; color: #dbdee1; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        
+        /* Sidebar Styles */
+        .sidebar { width: 260px; background: #2b2d31; display: flex; flex-direction: column; border-right: 1px solid #1e1f22; }
+        .sidebar-header { padding: 20px; background: #232428; border-bottom: 1px solid #1e1f22; }
+        .sidebar-content { flex: 1; overflow-y: auto; padding: 10px; }
+        .section-title { font-size: 0.7rem; font-weight: bold; color: #949ba4; text-transform: uppercase; margin: 15px 0 5px 5px; display: flex; justify-content: space-between; align-items: center; }
+        
+        /* List Items */
+        .nav-item { padding: 8px 12px; border-radius: 4px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; transition: 0.2s; font-size: 0.9rem; }
+        .nav-item:hover { background: #35373c; color: white; }
+        .nav-item.active { background: #404249; color: white; }
+        .nav-item.global { color: #5865f2; font-weight: bold; }
+        .delete-btn { opacity: 0; color: #da373c; font-size: 0.8rem; }
+        .nav-item:hover .delete-btn { opacity: 1; }
+
+        /* Main Chat Area */
         .chat-area { flex: 1; display: flex; flex-direction: column; }
+        .room-info { background: #313338; padding: 15px 20px; font-size: 1rem; font-weight: bold; border-bottom: 1px solid #1e1f22; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
         
-        /* Message Area */
-        #messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
-        .msg { background: #383a40; padding: 10px 15px; border-radius: 8px; max-width: 80%; align-self: flex-start; position: relative; }
+        #messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; background: #313338; }
+        .msg { background: #383a40; padding: 10px 15px; border-radius: 8px; max-width: 80%; align-self: flex-start; }
         .msg.mine { align-self: flex-end; background: #5865f2; color: white; }
-        
         .msg b { display: block; font-size: 0.75rem; color: #00aff4; margin-bottom: 3px; }
         .msg.mine b { color: #e0e0e0; }
-
-        /* Timestamp Style */
         .time { font-size: 0.65rem; opacity: 0.6; margin-top: 5px; text-align: right; display: block; }
 
-        /* Controls */
-        .room-info { background: #232428; padding: 10px 20px; font-size: 0.9rem; border-bottom: 1px solid #1e1f22; display: flex; justify-content: space-between; }
+        /* Inputs */
         .input-area { padding: 20px; background: #313338; display: flex; gap: 10px; }
         input { flex: 1; background: #383a40; border: none; padding: 12px; color: white; border-radius: 5px; outline: none; }
-        button { background: #5865f2; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        button:hover { background: #4752c4; }
-        .room-btn { background: #4e5058; margin-top: 10px; font-size: 0.8rem; color: white; padding: 8px; border-radius: 5px; cursor: pointer; border: none; }
+        button.send-btn { background: #5865f2; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .add-btn { cursor: pointer; font-size: 1.2rem; line-height: 1; }
+        .add-btn:hover { color: white; }
     </style>
 </head>
 <body>
 
 <div class="sidebar">
-    <h2 style="color: white; margin-top: 0;">Messenger</h2>
-    <p style="font-size: 0.8rem; color: #b5bac1;">USER: <b id="user-display">...</b></p>
-    <button class="room-btn" onclick="changeRoom()">Join/Create Room</button>
-    <p style="font-size: 0.7rem; margin-top: auto; color: #949ba4;">History saved in Cloud</p>
+    <div class="sidebar-header">
+        <h3 style="margin: 0; font-size: 1.1rem; color: white;">Messenger</h3>
+        <span style="font-size: 0.8rem; color: #b5bac1;">User: <b id="user-display">...</b></span>
+    </div>
+
+    <div class="sidebar-content">
+        <div class="nav-item global" id="item-Global" onclick="switchRoom('Global')"># Global Chat</div>
+
+        <div class="section-title">Servers <span class="add-btn" onclick="addRoom('server')">+</span></div>
+        <div id="server-list"></div>
+
+        <div class="section-title">Private Chats <span class="add-btn" onclick="addRoom('friend')">+</span></div>
+        <div id="friend-list"></div>
+    </div>
 </div>
 
 <div class="chat-area">
     <div class="room-info">
-        <span>Channel: <b id="room-display">Global</b></span>
+        <span># <span id="room-display">Global</span></span>
     </div>
+    
     <div id="messages"></div>
+
     <div class="input-area">
-        <input type="text" id="message-input" placeholder="Type a message..." onkeypress="handleKey(event)">
-        <button onclick="sendMessage()">Send</button>
+        <input type="text" id="message-input" placeholder="Message..." onkeypress="handleKey(event)">
+        <button class="send-btn" onclick="sendMessage()">Send</button>
     </div>
 </div>
 
@@ -52,7 +75,6 @@
   import { getFirestore, collection, addDoc, query, where, orderBy, onSnapshot, serverTimestamp } 
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-  // YOUR FIREBASE CONFIG
   const firebaseConfig = {
     apiKey: "AIzaSyBDAjMzBQs9KAqGbTnJbXFc3L9tRcAwKGA",
     authDomain: "messenger-app-4a96f.firebaseapp.com",
@@ -65,21 +87,69 @@
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
 
+  // --- DATA SETUP ---
   let username = localStorage.getItem('chat_user') || prompt("Enter Username:") || "User" + Math.floor(Math.random()*1000);
   localStorage.setItem('chat_user', username);
   document.getElementById('user-display').innerText = username;
 
   let currentRoom = localStorage.getItem('chat_room') || "Global";
-  document.getElementById('room-display').innerText = currentRoom;
+  let servers = JSON.parse(localStorage.getItem('chat_servers')) || [];
+  let friends = JSON.parse(localStorage.getItem('chat_friends')) || [];
 
-  window.changeRoom = () => {
-      let r = prompt("Enter Room Name:");
-      if(r) {
-          localStorage.setItem('chat_room', r);
-          location.reload();
-      }
+  // --- FUNCTIONS ---
+
+  window.addRoom = (type) => {
+    const name = prompt(type === 'server' ? "Enter Server Name:" : "Enter Friend's Name/ID:");
+    if (!name) return;
+    if (type === 'server') servers.push(name);
+    else friends.push(name);
+    saveAndRefresh();
   };
 
+  window.switchRoom = (name) => {
+    localStorage.setItem('chat_room', name);
+    location.reload();
+  };
+
+  window.deleteRoom = (e, name, type) => {
+    e.stopPropagation();
+    if (!confirm(`Remove ${name}?`)) return;
+    if (type === 'server') servers = servers.filter(s => s !== name);
+    else friends = friends.filter(f => f !== name);
+    if (currentRoom === name) localStorage.setItem('chat_room', 'Global');
+    saveAndRefresh();
+  };
+
+  function saveAndRefresh() {
+    localStorage.setItem('chat_servers', JSON.stringify(servers));
+    localStorage.setItem('chat_friends', JSON.stringify(friends));
+    renderSidebar();
+  }
+
+  function renderSidebar() {
+    const sList = document.getElementById('server-list');
+    const fList = document.getElementById('friend-list');
+    sList.innerHTML = '';
+    fList.innerHTML = '';
+
+    servers.forEach(s => {
+        sList.innerHTML += `
+            <div class="nav-item ${currentRoom === s ? 'active' : ''}" onclick="switchRoom('${s}')">
+                # ${s} <span class="delete-btn" onclick="deleteRoom(event, '${s}', 'server')">×</span>
+            </div>`;
+    });
+
+    friends.forEach(f => {
+        fList.innerHTML += `
+            <div class="nav-item ${currentRoom === f ? 'active' : ''}" onclick="switchRoom('${f}')">
+                👤 ${f} <span class="delete-btn" onclick="deleteRoom(event, '${f}', 'friend')">×</span>
+            </div>`;
+    });
+
+    document.getElementById('room-display').innerText = currentRoom;
+  }
+
+  // --- CHAT LOGIC ---
   window.sendMessage = async () => {
       const input = document.getElementById('message-input');
       const text = input.value.trim();
@@ -94,44 +164,25 @@
       input.value = "";
   };
 
-  // 1. Enter-to-Send Logic
-  window.handleKey = (e) => {
-      if (e.key === 'Enter') sendMessage();
-  };
+  window.handleKey = (e) => { if (e.key === 'Enter') sendMessage(); };
 
-  const q = query(
-      collection(db, "messages"), 
-      where("room", "==", currentRoom),
-      orderBy("timestamp", "asc")
-  );
+  const q = query(collection(db, "messages"), where("room", "==", currentRoom), orderBy("timestamp", "asc"));
 
   onSnapshot(q, (snapshot) => {
       const msgBox = document.getElementById('messages');
       msgBox.innerHTML = "";
       snapshot.forEach((doc) => {
           const data = doc.data();
-          
-          // 2. Timestamp Logic
-          let timeString = "";
-          if(data.timestamp) {
-              const d = data.timestamp.toDate();
-              timeString = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          }
-
+          let timeString = data.timestamp ? data.timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "pending...";
           const div = document.createElement('div');
           div.className = `msg ${data.user === username ? 'mine' : ''}`;
-          div.innerHTML = `
-            <b>${data.user}</b>
-            ${data.text}
-            <span class="time">${timeString}</span>
-          `;
+          div.innerHTML = `<b>${data.user}</b>${data.text}<span class="time">${timeString}</span>`;
           msgBox.appendChild(div);
       });
-      
-      // 3. Auto-Scroll Logic
       msgBox.scrollTop = msgBox.scrollHeight;
   });
-</script>
 
+  renderSidebar();
+</script>
 </body>
 </html>
