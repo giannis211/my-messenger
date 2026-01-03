@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Messenger Pro</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #1e1f22; color: #dbdee1; margin: 0; display: flex; height: 100vh; }
+        .sidebar { width: 260px; background: #2b2d31; padding: 20px; display: flex; flex-direction: column; border-right: 1px solid #1e1f22; }
+        .chat-area { flex: 1; display: flex; flex-direction: column; }
+        
+        /* Message Area */
+        #messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+        .msg { background: #383a40; padding: 10px 15px; border-radius: 8px; max-width: 80%; align-self: flex-start; }
+        .msg.mine { align-self: flex-end; background: #5865f2; color: white; }
+        .msg b { display: block; font-size: 0.75rem; color: #00aff4; margin-bottom: 3px; }
+        .msg.mine b { color: #e0e0e0; }
+
+        /* Controls */
+        .room-info { background: #232428; padding: 10px 20px; font-size: 0.9rem; border-bottom: 1px solid #1e1f22; display: flex; justify-content: space-between; }
+        .input-area { padding: 20px; background: #313338; display: flex; gap: 10px; }
+        input { flex: 1; background: #383a40; border: none; padding: 12px; color: white; border-radius: 5px; outline: none; }
+        button { background: #5865f2; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #4752c4; }
+        .room-btn { background: #4e5058; margin-top: 10px; font-size: 0.8rem; }
+    </style>
+</head>
+<body>
+
+<div class="sidebar">
+    <h2 style="color: white; margin-top: 0;">Messenger</h2>
+    <p style="font-size: 0.8rem; color: #b5bac1;">USER: <b id="user-display">...</b></p>
+    <button class="room-btn" onclick="changeRoom()">Join/Create Room</button>
+    <p style="font-size: 0.7rem; margin-top: auto; color: #949ba4;">Powered by Firebase Cloud Storage</p>
+</div>
+
+<div class="chat-area">
+    <div class="room-info">
+        <span>Channel: <b id="room-display">Global</b></span>
+    </div>
+    <div id="messages"></div>
+    <div class="input-area">
+        <input type="text" id="message-input" placeholder="Type a message...">
+        <button onclick="sendMessage()">Send</button>
+    </div>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+  import { getFirestore, collection, addDoc, query, where, orderBy, onSnapshot, serverTimestamp } 
+  from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+  // YOUR FIREBASE CONFIG
+  const firebaseConfig = {
+    apiKey: "AIzaSyBDAjMzBQs9KAqGbTnJbXFc3L9tRcAwKGA",
+    authDomain: "messenger-app-4a96f.firebaseapp.com",
+    projectId: "messenger-app-4a96f",
+    storageBucket: "messenger-app-4a96f.firebasestorage.app",
+    messagingSenderId: "225256050732",
+    appId: "1:225256050732:web:26d94b7c8022229ec94189"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  // User & Room Setup
+  let username = localStorage.getItem('chat_user') || prompt("Enter Username:") || "User" + Math.floor(Math.random()*1000);
+  localStorage.setItem('chat_user', username);
+  document.getElementById('user-display').innerText = username;
+
+  let currentRoom = localStorage.getItem('chat_room') || "Global";
+  document.getElementById('room-display').innerText = currentRoom;
+
+  window.changeRoom = () => {
+      let r = prompt("Enter Room Name (e.g. Secret123):");
+      if(r) {
+          localStorage.setItem('chat_room', r);
+          location.reload();
+      }
+  };
+
+  // Send Message
+  window.sendMessage = async () => {
+      const input = document.getElementById('message-input');
+      const text = input.value.trim();
+      if (!text) return;
+
+      await addDoc(collection(db, "messages"), {
+          user: username,
+          text: text,
+          room: currentRoom,
+          timestamp: serverTimestamp()
+      });
+      input.value = "";
+  };
+
+  // Listen for Messages in current room only
+  const q = query(
+      collection(db, "messages"), 
+      where("room", "==", currentRoom),
+      orderBy("timestamp", "asc")
+  );
+
+  onSnapshot(q, (snapshot) => {
+      const msgBox = document.getElementById('messages');
+      msgBox.innerHTML = "";
+      snapshot.forEach((doc) => {
+          const data = doc.data();
+          const div = document.createElement('div');
+          div.className = `msg ${data.user === username ? 'mine' : ''}`;
+          div.innerHTML = `<b>${data.user}</b>${data.text}`;
+          msgBox.appendChild(div);
+      });
+      msgBox.scrollTop = msgBox.scrollHeight;
+  });
+
+  document.getElementById('message-input').onkeypress = (e) => { if(e.key === 'Enter') sendMessage(); };
+</script>
+
+</body>
+</html>
